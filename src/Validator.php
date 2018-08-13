@@ -70,22 +70,6 @@ class Validator
      */
     public $greylisted_considered_valid = true;
 
-    /**
-     * Timeout values for various commands (in seconds) per RFC 2821
-     *
-     * @var array
-     */
-    protected $command_timeouts = [
-        'ehlo' => 120,
-        'helo' => 120,
-        'tls'  => 180, // start tls
-        'mail' => 300, // mail from
-        'rcpt' => 300, // rcpt to,
-        'rset' => 30,
-        'quit' => 60,
-        'noop' => 60
-    ];
-
     const CRLF = "\r\n";
 
     // Some smtp response codes
@@ -509,7 +493,7 @@ class Validator
 
         $result = false;
         try {
-            $this->expect(self::SMTP_CONNECT_SUCCESS, $this->command_timeouts['helo']);
+            $this->expect(self::SMTP_CONNECT_SUCCESS, $this->connect_timeout);
             $this->ehlo();
 
             // Session started
@@ -520,7 +504,7 @@ class Validator
             if ($this->tls) {
                 // send STARTTLS, wait 3 minutes
                 $this->send('STARTTLS');
-                $this->expect(self::SMTP_CONNECT_SUCCESS, $this->command_timeouts['tls']);
+                $this->expect(self::SMTP_CONNECT_SUCCESS, $this->connect_timeout);
                 $result = stream_socket_enable_crypto($this->socket, true,
                     STREAM_CRYPTO_METHOD_TLS_CLIENT);
                 if (!$result) {
@@ -550,11 +534,11 @@ class Validator
         try {
             // Modern
             $this->send('EHLO ' . $this->from_domain);
-            $this->expect(self::SMTP_GENERIC_SUCCESS, $this->command_timeouts['ehlo']);
+            $this->expect(self::SMTP_GENERIC_SUCCESS, $this->connect_timeout);
         } catch (UnexpectedResponseException $e) {
             // Legacy
             $this->send('HELO ' . $this->from_domain);
-            $this->expect(self::SMTP_GENERIC_SUCCESS, $this->command_timeouts['helo']);
+            $this->expect(self::SMTP_GENERIC_SUCCESS, $this->connect_timeout);
         }
     }
 
@@ -577,7 +561,7 @@ class Validator
         $this->send('MAIL FROM:<' . $from . '>');
 
         try {
-            $this->expect(self::SMTP_GENERIC_SUCCESS, $this->command_timeouts['mail']);
+            $this->expect(self::SMTP_GENERIC_SUCCESS, $this->connect_timeout);
 
             // Set state flags
             $this->state['mail'] = true;
@@ -628,7 +612,7 @@ class Validator
             $this->send('RCPT TO:<' . $to . '>');
             // Handle response
             try {
-                $this->expect($expected_codes, $this->command_timeouts['rcpt']);
+                $this->expect($expected_codes, $this->connect_timeout);
                 $this->state['rcpt'] = true;
                 $valid               = true;
             } catch (UnexpectedResponseException $e) {
@@ -658,7 +642,7 @@ class Validator
             // hotmail returns this o_O
             self::SMTP_TRANSACTION_FAILED
         ];
-        $this->expect($expected, $this->command_timeouts['rset'], true);
+        $this->expect($expected, $this->connect_timeout, true);
         $this->state['mail'] = false;
         $this->state['rcpt'] = false;
     }
@@ -675,7 +659,7 @@ class Validator
             $this->send('QUIT');
             $this->expect(
                 [self::SMTP_GENERIC_SUCCESS,self::SMTP_QUIT_SUCCESS],
-                $this->command_timeouts['quit'],
+                $this->connect_timeout,
                 true
             );
         }
@@ -702,7 +686,7 @@ class Validator
             self::SMTP_SYNTAX_ERROR,
             self::SMTP_CONNECT_SUCCESS
         ];
-        $this->expect($expected_codes, $this->command_timeouts['noop'], true);
+        $this->expect($expected_codes, $this->connect_timeout, true);
     }
 
     /**
